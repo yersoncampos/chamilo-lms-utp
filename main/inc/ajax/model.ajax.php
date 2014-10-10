@@ -9,6 +9,15 @@ require_once '../global.inc.php';
 
 $libpath = api_get_path(LIBRARY_PATH);
 
+// Chamilo UTP Development 
+require_once api_get_path(SYS_PATH).'dev/vendor/autoload.php';
+
+// Uncomment enable debug
+// use Symfony\Component\Debug\Debug;
+// Debug::enable();
+
+use Chamilo\Component\Tracking as TrackingNew; 
+
 // 1. Setting variables needed by jqgrid
 
 $action = $_GET['a'];
@@ -210,7 +219,7 @@ switch ($action) {
         $documents = getAllDocumentToWork($work_id, api_get_course_int_id());
 
         if (empty($documents)) {
-            $where_condition .= " AND u.user_id = ".api_get_user_id();
+            //$where_condition .= " AND u.user_id = ".api_get_user_id();
             $count = get_work_user_list($start, $limit, $sidx, $sord, $work_id, $where_condition, null, true);
         } else {
             $count = get_work_user_list_from_documents(
@@ -224,29 +233,9 @@ switch ($action) {
                 true
             );
         }
-        break;
-
+       break;
     case 'get_work_student_list_overview':
-        if (!api_is_allowed_to_edit()) {
-            return 0;
-        }
-        require_once api_get_path(SYS_CODE_PATH).'work/work.lib.php';
-        $workId = isset($_GET['work_id']) ? $_GET['work_id'] : null;
-        $count = getWorkUserListData(
-            $workId,
-            api_get_course_id(),
-            api_get_session_id(),
-            api_get_group_id(),
-            0,
-            $limit,
-            null,
-            null,
-            true
-        );
-        break;
-
-    case 'get_work_student_list_overview':
-        if (!api_is_allowed_to_edit()) {
+        if (!api_is_allowed_to_edit() && !api_is_course_admin()) {
             return 0;
         }
         require_once api_get_path(SYS_CODE_PATH).'work/work.lib.php';
@@ -398,23 +387,41 @@ switch ($action) {
     case 'display_session_progress_report':
         $sessionId = intval($_REQUEST['session_id']);
         $courseId = intval($_REQUEST['course_id']);
-        $course = api_get_course_info_by_id($courseId);
         if ($sessionId === 0) {
-            $session = SessionManager::get_session_by_course($course['code']);
+            if ($courseId === 0) {
+                $courseList = CourseManager::get_courses_list();
+                $count = 0;
+                $session = array();
+                foreach ($courseList as $course) {
+                    $sessionTmp = SessionManager::get_session_by_course($course['code']);
+                    $session = array_merge($session, $sessionTmp);
+                }
+            } else {
+                $course = api_get_course_info_by_id($courseId);
+                $session = SessionManager::get_session_by_course($course['code']);
+            }
         } else {
             $session = api_get_session_info($sessionId);
         }
         $count = count($session);
         break;
     case 'get_evaluation_detail':
-        $records = Tracking::get_exercise_progress(
+        $options = array(
+            'order' => array(
+                'field' => $_GET['sidx'] == null ? 'session_id' : $_GET['sidx'],
+                'sort' => $_GET['sord']
+            ),
+            'page' => $_GET['page'],
+            'limit' => $_GET['rows']
+        );
+        $records = TrackingNew::get_exercise_progress(
             $_GET['session_id'],
             $_GET['course_id'],
             $_GET['exercise_id'],
             "",
             "",
-            "",
-            true
+            $options,
+            false
         );
         $count = count($records);
         break;
@@ -430,13 +437,14 @@ switch ($action) {
         $count = count($records);
         break;
     case 'display_course_progress_summary':
-        $count = 1;
+        $courseId = intval($_REQUEST['course_id']);
+        $count = SessionManager::getCountCourseProgress($courseId);
         break;
     case 'display_session_progress_summary':
         $sessionId = intval($_REQUEST['session_id']);
         $courseId = intval($_REQUEST['course_id']);
-        $options['getCount'] = true;
-        $count = Tracking::getSessionProgressSummary($courseId, $sessionId, $options);
+        $sessions = Tracking::getSessionProgressSummary($courseId, $sessionId, $options);
+        $count = count($sessions);
         break;
     default:
         exit;
@@ -562,7 +570,7 @@ switch ($action) {
         );
 
         break;
-	case 'get_user_skill_ranking':
+    case 'get_user_skill_ranking':
         $columns = array('photo', 'firstname', 'lastname', 'skills_acquired', 'currently_learning', 'rank');
         $result = $skill->get_user_list_skill_ranking($start, $limit, $sidx, $sord, $where_condition);
         $result = msort($result, 'skills_acquired', 'asc');
@@ -627,7 +635,7 @@ switch ($action) {
         $documents = getAllDocumentToWork($work_id, api_get_course_int_id());
 
         if (empty($documents)) {
-            $where_condition .= " AND u.user_id = ".api_get_user_id();
+            //$where_condition .= " AND u.user_id = ".api_get_user_id();
             $result = get_work_user_list($start, $limit, $sidx, $sord, $work_id, $where_condition);
         } else {
             $result = get_work_user_list_from_documents(
@@ -651,9 +659,9 @@ switch ($action) {
             );
         }
         $result = get_exam_results_data($start, $limit, $sidx, $sord, $exercise_id, $where_condition);
-		break;
+        break;
     case 'get_work_student_list_overview':
-        if (!api_is_allowed_to_edit()) {
+        if (!api_is_allowed_to_edit() && !api_is_course_admin()) {
             return array();
         }
         require_once api_get_path(SYS_CODE_PATH).'work/work.lib.php';
@@ -671,12 +679,12 @@ switch ($action) {
             $sord
         );
         break;
-	case 'get_hotpotatoes_exercise_results':
-		$course = api_get_course_info();
-		$documentPath = api_get_path(SYS_COURSE_PATH) . $course['path'] . "/document";
-		$columns = array('firstname', 'lastname', 'username', 'group_name', 'exe_date',  'score', 'actions');
-		$result = get_exam_results_hotpotatoes_data($start, $limit, $sidx, $sord, $hotpot_path, $where_condition); //get_exam_results_data($start, $limit, $sidx, $sord, $exercise_id, $where_condition);
-		break;
+    case 'get_hotpotatoes_exercise_results':
+        $course = api_get_course_info();
+        $documentPath = api_get_path(SYS_COURSE_PATH) . $course['path'] . "/document";
+        $columns = array('firstname', 'lastname', 'username', 'group_name', 'exe_date',  'score', 'actions');
+        $result = get_exam_results_hotpotatoes_data($start, $limit, $sidx, $sord, $hotpot_path, $where_condition); //get_exam_results_data($start, $limit, $sidx, $sord, $exercise_id, $where_condition);
+        break;
     case 'get_sessions_tracking':
         if (api_is_drh()) {
             $sessions = SessionManager::get_sessions_followed_by_drh(api_get_user_id(), $start, $limit);
@@ -773,6 +781,7 @@ switch ($action) {
                 'limit'=> "$start , $limit"
             )
         );
+
         break;
     case 'get_session_lp_progress':
         $sessionId = 0;
@@ -791,10 +800,12 @@ switch ($action) {
          *
          */
         $columns = array(
+            'session_name',
             'username',
             'firstname',
             'lastname',
         );
+
         require_once api_get_path(SYS_CODE_PATH).'newscorm/learnpathList.class.php';
         $lessons = LearnpathList::get_course_lessons($course['code'], $intSessionId);
         foreach ($lessons as $lesson_id => $lesson) {
@@ -812,8 +823,7 @@ switch ($action) {
         break;
     case 'get_survey_overview':
         $sessionId = 0;
-        if (!empty($_GET['course_id']) && !empty($_GET['survey_id']))
-        {
+        if (!empty($_GET['course_id']) && !empty($_GET['survey_id'])) {
             $sessionId  = intval($_GET['session_id']);
             $courseId   = intval($_GET['course_id']);
             $surveyId   = intval($_GET['survey_id']);
@@ -832,8 +842,7 @@ switch ($action) {
 
         $questions = survey_manager::get_questions($surveyId, $courseId);
 
-        foreach ($questions as $question_id => $question)
-        {
+        foreach ($questions as $question_id => $question) {
             $columns[] = $question_id;
         }
 
@@ -846,51 +855,20 @@ switch ($action) {
         );
         break;
     case 'display_student_progress_report':
-        $columns = array(
-            'sessionid',
-            'courseid',
-            'course',
-            'session',
-            'username',
-            'lastname',
-            'firstname',
-            'time_in_course',
-            'lesson_progress',
-            'laboratory_progress',
-            'self_learning_progress',
-            'lesson_performance',
-            'laboratory_performance',
-            'self_learning_performance',
-            'last_connection',
-            'graph'
-        );
-
-        $column_names = array(
-            get_lang('SessionCode'),
-            get_lang('CourseCode'),
-            get_lang('Course'),
-            get_lang('Section'),
-            get_lang('Code'),
-            get_lang('LastName'),
-            get_lang('FirstName'),
-            get_lang('TimeInCourse'),
-            get_lang('Lesson'),
-            get_lang('Laboratory'),
-            get_lang('SelfLearning'),
-            get_lang('Lesson'),
-            get_lang('Laboratory'),
-            get_lang('SelfLearning'),
-            get_lang('LastConnection')
-        );
+        $columnParameters = Tracking::getColumnHeaders();
+        $columns = $columnParameters['columns'];
+        $column_names = $columnParameters['column_names'];
 
         $sessionId = 0;
+        $courseId = null;
         if (!empty($_GET['course_id'])) {
             $sessionId  = intval($_GET['session_id']);
             $courseId   = intval($_GET['course_id']);
         }
-        $result = SessionManager::getSessionProgress(
-            $sessionId,
+
+        $result = Tracking::getStudentProgressSummary(
             $courseId,
+            $sessionId,
             array(
                 'where' => $where_condition,
                 'order' => "$sidx $sord",
@@ -899,98 +877,59 @@ switch ($action) {
         );
         break;
     case 'display_course_progress_summary':
-        $columns = array(
-            'courseid',
-            'course',
-            'time_in_course',
-            'lesson_progress',
-            'laboratory_progress',
-            'self_learning_progress',
-            'lesson_performance',
-            'laboratory_performance',
-            'self_learning_performance',
-        );
 
-        $column_names = array(
-            get_lang('CourseCode'),
-            get_lang('Course'),
-            get_lang('TimeInCourse'),
-            get_lang('Lesson'),
-            get_lang('Laboratory'),
-            get_lang('SelfLearning'),
-            get_lang('Lesson'),
-            get_lang('Laboratory'),
-            get_lang('SelfLearning')
-        );
+        $columnParameters = Tracking::getColumnHeaders();
+        $columns = $columnParameters['columns'];
+        $column_names = $columnParameters['column_names'];
 
         if (!empty($_GET['course_id'])) {
-            $courseId   = intval($_GET['course_id']);
+            $courseId = intval($_GET['course_id']);
         }
 
-        $result = SessionManager::getCourseProgress($courseId);
-        break;
-    case 'display_session_progress_summary':
-        $columns = array(
-            'sessionid',
-            'courseid',
-            'session',
-            'course',
-            'time_in_course',
-            'lesson_progress',
-            'laboratory_progress',
-            'self_learning_progress',
-            'lesson_performance',
-            'laboratory_performance',
-            'self_learning_performance',
+        $options = array(
+            'from' => $start,
+            'rows' => $limit,
+            'where' => $where_condition,
+            'order' => "$sidx $sord",
+            'limit'=> "$start , $limit"
         );
 
-        $column_names = array(
-            get_lang('SessionCode'),
-            get_lang('CourseCode'),
-            get_lang('Section'),
-            get_lang('Course'),
-            get_lang('TimeInCourse'),
-            get_lang('Lesson'),
-            get_lang('Laboratory'),
-            get_lang('SelfLearning'),
-            get_lang('Lesson'),
-            get_lang('Laboratory'),
-            get_lang('SelfLearning')
+        $result = SessionManager::getCourseProgress($courseId, $options);
+        break;
+    case 'display_session_progress_summary':
+        $columnParameters = Tracking::getColumnHeaders();
+        $columns = $columnParameters['columns'];
+        $column_names = $columnParameters['column_names'];
+
+        $options = array(
+            'from' => $start,
+            'rows' => $limit,
+            //'where' => $where_condition,
+            'order' => "$sidx $sord",
+            'limit'=> "$start , $limit"
         );
 
         if (!empty($_GET['course_id'])) {
             $courseId = intval($_GET['course_id']);
             $sessionId = intval($_GET['session_id']);
-            $option['type'] = array(
-                'lesson' => 'Leccion',
-                'selflearning' => 'Autoaprendizaje',
-                'laboratory' => 'laboratorio'
-            );
         }
-
-        $result = Tracking::getSessionProgressSummary($courseId, $sessionId, $option);
+        $result = Tracking::getSessionProgressSummary($courseId, $sessionId, $options);
         break;
     case 'display_student_progress_detail':
-        $columns = array(
-            'lesson_name',
-            'lesson_progress',
-            'laboratory_progress',
-            'self_learning_progress',
-            'laboratory_performance',
-            'self_learning_performance',
-            'last_date'
-        );
+        $columnParameters = Tracking::getStudentColumnHeaders();
+        $columns = $columnParameters['columns'];
+        $column_names = $columnParameters['column_names'];
 
         $sessionId = 0;
-        if (!empty($_GET['course_id'])) {
+        if (!empty($_GET['session_id'])) {
             $sessionId  = intval($_GET['session_id']);
-            $courseId   = intval($_GET['course_id']);
         }
 
-        $username = Database::escape_string($_GET['username']);
+        $courseId   = intval($_GET['course_id']);
+        $userId = intval($_GET['user_id']);
 
         $result = Tracking::getStudentProgressDetailUnit(
-            $username,
+            $userId,
             $sessionId,
             $courseId,
             array(
@@ -999,6 +938,7 @@ switch ($action) {
                 'limit'=> "$start , $limit"
             )
         );
+
         break;
     case 'get_session_progress':
         $columns = array(
@@ -1478,20 +1418,22 @@ switch ($action) {
             get_lang('Grade')
         );
 
-        $option = array(
-            'where' => $where_condition,
-            'order' => "$sidx $sord",
-            'limit' => "$start , $limit"
+        $options = array(
+            'order' => array(
+                'field' => $_GET['sidx'] == null ? 'session_id' : $_GET['sidx'],
+                'sort' => $_GET['sord']
+            ),
+            'page' => $_GET['page'],
+            'limit' => $_GET['rows']
         );
-
-        $result = Tracking::get_exercise_progress(
+        $result = TrackingNew::get_exercise_progress(
             $sessionId,
             $courseId,
             $exerciseId,
-            "",
-            "",
-            $option,
-            true
+            '',
+            '',
+            $options,
+            false
         );
         break;
     case 'get_evaluation_detail_DHR':
@@ -1570,7 +1512,16 @@ switch ($action) {
         } else {
             $arrSession = array($session['id']);
         }
-        $result = SessionManager::sessionProgressByCourse($course['code'], $arrSession);
+        if ($courseId === 0) {
+            $count = 0;
+            $result = array();
+            foreach ($courseList as $course) {
+                $progress = SessionManager::sessionProgressByCourse($course['code'], $arrSession);
+                $result = array_merge($result, $progress);
+            }
+        } else {
+            $result = SessionManager::sessionProgressByCourse($course['code'], $arrSession);
+        }
         break;
     default:
         exit;
@@ -1638,7 +1589,7 @@ if (in_array($action, $allowed_actions)) {
         }
         foreach ($result as $row) {
             foreach ($columns as $col) {
-                $array[$j][] = strip_tags($row[$col]);
+                $array[$j][] = strip_tags(stripHtmlComments($row[$col]));
             }
             $j++;
         }
@@ -1676,7 +1627,7 @@ if (in_array($action, $allowed_actions)) {
             }
             $array = array();
             foreach ($columns as $col) {
-                $array[] = isset($row[$col]) ? $row[$col] : null;
+                $array[] = isset($row[$col]) ? stripHtmlComments($row[$col]) : null;
             }
             $response->rows[$i]['cell']=$array;
             $i++;

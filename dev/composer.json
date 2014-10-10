@@ -1,0 +1,8 @@
+{
+    "require": {
+        "symfony/debug": "@stable",
+        "symfony/finder": "@stable",
+        "symfony/filesystem": "@stable",
+        "illuminate/database": "@stable"
+    }
+}
