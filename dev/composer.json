@@ -1,6 +1,7 @@
 {
     "require": {
         "symfony/debug": "@stable",
-        "symfony/finder": "@stable"
+        "symfony/finder": "@stable",
+        "symfony/filesystem": "@stable"
     }
 }
