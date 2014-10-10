@@ -14,4 +14,6 @@ return array(
     'Illuminate\\Database' => array($vendorDir . '/illuminate/database'),
     'Illuminate\\Container' => array($vendorDir . '/illuminate/container'),
     'Carbon' => array($vendorDir . '/nesbot/carbon/src'),
+    // Chamilo development source
+    'Chamilo' => array($baseDir . '/chamilo/src'),
 );
