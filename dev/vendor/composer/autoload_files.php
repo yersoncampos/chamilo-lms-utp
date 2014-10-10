@@ -7,4 +7,6 @@ $baseDir = dirname($vendorDir);
 
 return array(
     $vendorDir . '/illuminate/support/Illuminate/Support/helpers.php',
+    // Load Chamilo database configuration
+    $baseDir . '/chamilo/conf/database.php',
 );
